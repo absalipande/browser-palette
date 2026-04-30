@@ -20,6 +20,54 @@ Web Extension tooling.
 - Make tab switching and cleanup fast.
 - Stay lightweight, calm, and useful.
 
+## Product Contract
+
+This project is a local-first browser command palette built around personal
+browsing memory, not just a visual search box.
+
+Core feature set:
+
+- Maintain a built-in history database because Safari does not expose browser
+  history in the way this project needs.
+- Store useful page metadata:
+  - page title
+  - URL
+  - normalized/display URL
+  - last visited date
+  - visit count
+  - favicon data, eventually base64 with a 7 day TTL
+- Prune low-value URL noise:
+  - tracking parameters
+  - referral parameters
+  - pagination/noisy parameters where safe
+  - trailing slashes
+  - `index.html`, `index.php`, and similar default index files
+- Preserve user intent where possible:
+  - if the user types one domain and it redirects to another, keep the typed
+    domain as a strong historical result while also recording the final URL.
+- Rank history with personal behavior:
+  - recent repeated visits should beat old high-count visits
+  - title, hostname, and exact domain matches should get strong boosts
+  - open tabs should generally beat history when match quality is close
+- Support fast cleanup:
+  - `Backspace` / `Delete` on an open tab result closes the tab
+  - `Backspace` / `Delete` on a history result deletes that stored result
+- Add polish where it improves recognition:
+  - use favicons in results
+  - eventually derive an open-tab color indicator from favicon dominant color
+- Run automatic garbage collection:
+  - daily cleanup
+  - delete history entries older than 30 days with fewer than 2 visits
+  - expire favicon data after 7 days
+- Show search suggestions only when there are no strong local tab/history
+  matches.
+- Behave like a browser command bar:
+  - selected tab result switches to that tab
+  - selected history result opens in a new tab
+  - selected URL result opens the URL
+  - selected search result searches the web
+  - smart domain matching turns `youtube` into `youtube.com`
+
 ## Keyboard Shortcut Goal
 
 The ideal shortcut is `Command+T`, because the palette should feel like a
@@ -57,16 +105,18 @@ browser-palette/
   src/
     background/
       index.ts
+    components/
+      ui/
+        button.tsx
+        command.tsx
+        dialog.tsx
     content/
-      index.ts
-    db/
-      history-db.ts
-    ranking/
-      score-results.ts
-    url/
-      normalize-url.ts
+      index.tsx
+    lib/
+      cn.ts
+    types.ts
     ui/
-      palette.ts
+      palette.tsx
       palette.css
 ```
 
@@ -76,11 +126,12 @@ Use TypeScript for the extension code. The browser APIs, message contracts,
 command result types, and local history records benefit from explicit types.
 
 Use React for the injected palette UI, Tailwind CSS for styling, and local
-shadcn-style primitives/utility patterns for a modern command surface. We are
-not using the shadcn CLI yet because this is an extension overlay rather than a
-normal app shell, but the styling model follows the same approach:
+shadcn/ui components for a modern command surface. The current primitives are
+owned in `src/components/ui` so they stay extension-safe:
 
 - typed components
+- Radix Dialog
+- `cmdk` Command
 - `cn(...)` class merging
 - CSS variables for theme tokens
 - restrained component classes
@@ -112,8 +163,8 @@ Responsible for:
 - switching tabs
 - closing tabs
 - opening search results
-- writing local visit records
-- running cleanup tasks
+- opening web searches
+- later: writing local visit records and running cleanup tasks
 
 ### Local History Database
 
@@ -215,8 +266,8 @@ In Chrome, Arc, Brave, or another Chromium browser:
 5. Open any normal webpage.
 6. Press `Command+Shift+K` to open the palette.
 
-`Command+T` is also attempted by the content script, but many browsers reserve it
-before the extension can receive it.
+`Command+T` remains the product goal, but the current MVP uses
+`Command+Shift+K` because browsers usually reserve `Command+T`.
 
 For development, run:
 
@@ -224,4 +275,5 @@ For development, run:
 npm run dev
 ```
 
-When files change, return to `chrome://extensions` and reload the extension.
+This runs a watch build. When files change, return to `chrome://extensions` and
+reload the extension.

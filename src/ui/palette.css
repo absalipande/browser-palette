@@ -1,0 +1,209 @@
+@tailwind components;
+@tailwind utilities;
+
+:host {
+  all: initial;
+}
+
+:host *,
+:host *::before,
+:host *::after {
+  box-sizing: border-box;
+}
+
+:host button,
+:host input {
+  font: inherit;
+}
+
+:host img,
+:host svg {
+  display: block;
+}
+
+@layer components {
+  .bp-root,
+  .bp-dialog-overlay,
+  .bp-dialog-content {
+    --bp-background: 52 18% 98%;
+    --bp-foreground: 225 12% 11%;
+    --bp-muted: 220 12% 92%;
+    --bp-muted-foreground: 225 8% 46%;
+    --bp-accent: 220 16% 92%;
+    --bp-border: 220 12% 84%;
+    --bp-shadow: 0 24px 62px rgba(0, 0, 0, 0.22);
+    color-scheme: light dark;
+  }
+
+  .bp-root[data-theme="light"],
+  .bp-root[data-theme="light"] .bp-dialog-overlay,
+  .bp-root[data-theme="light"] .bp-dialog-content {
+    --bp-background: 52 18% 98%;
+    --bp-foreground: 225 12% 11%;
+    --bp-muted: 220 12% 92%;
+    --bp-muted-foreground: 225 8% 46%;
+    --bp-accent: 220 16% 92%;
+    --bp-border: 220 12% 84%;
+    --bp-shadow: 0 24px 62px rgba(0, 0, 0, 0.22);
+    color-scheme: light;
+  }
+
+  .bp-root[data-theme="dark"],
+  .bp-root[data-theme="dark"] .bp-dialog-overlay,
+  .bp-root[data-theme="dark"] .bp-dialog-content {
+    --bp-background: 225 7% 13%;
+    --bp-foreground: 60 9% 96%;
+    --bp-muted: 225 7% 20%;
+    --bp-muted-foreground: 60 6% 68%;
+    --bp-accent: 225 7% 24%;
+    --bp-border: 225 7% 28%;
+    --bp-shadow: 0 26px 70px rgba(0, 0, 0, 0.46);
+    color-scheme: dark;
+  }
+
+  .bp-root {
+    @apply fixed inset-0 z-[2147483647] m-0 block h-screen w-screen overflow-hidden p-0 font-sans text-[hsl(var(--bp-foreground))];
+    pointer-events: none;
+  }
+
+  .bp-sr-only {
+    @apply absolute h-px w-px overflow-hidden whitespace-nowrap border-0 p-0;
+    clip: rect(0, 0, 0, 0);
+    margin: -1px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .bp-root[data-theme="system"],
+    .bp-root[data-theme="system"] .bp-dialog-overlay,
+    .bp-root[data-theme="system"] .bp-dialog-content {
+      --bp-background: 225 7% 13%;
+      --bp-foreground: 60 9% 96%;
+      --bp-muted: 225 7% 20%;
+      --bp-muted-foreground: 60 6% 68%;
+      --bp-accent: 225 7% 24%;
+      --bp-border: 225 7% 28%;
+      --bp-shadow: 0 26px 70px rgba(0, 0, 0, 0.46);
+    }
+  }
+
+  .bp-dialog-overlay {
+    background: rgba(12, 13, 15, 0.34);
+    backdrop-filter: blur(9px) saturate(0.8);
+    @apply fixed inset-0 z-[2147483646];
+    pointer-events: auto;
+  }
+
+  .bp-dialog-content {
+    background: hsl(var(--bp-background));
+    box-shadow: var(--bp-shadow);
+    left: 50vw;
+    top: clamp(72px, 12vh, 132px);
+    transform: translateX(-50%);
+    height: min(560px, calc(100vh - 120px));
+    @apply fixed z-[2147483647] flex w-[min(720px,calc(100vw-42px))] flex-col overflow-hidden rounded-[14px] border border-[hsl(var(--bp-border))] font-sans text-[hsl(var(--bp-foreground))] outline-none;
+    pointer-events: auto;
+  }
+
+  .bp-command {
+    @apply flex min-h-0 flex-1 flex-col overflow-hidden bg-[hsl(var(--bp-background))];
+  }
+
+  .bp-command *,
+  .bp-command *:focus,
+  .bp-command *:focus-visible {
+    box-shadow: none;
+    outline: none;
+  }
+
+  .bp-command-topbar {
+    @apply flex h-[58px] items-center border-0 border-b border-solid border-[hsl(var(--bp-border))];
+  }
+
+  .bp-command-input-wrap {
+    @apply flex h-full min-w-0 flex-1 items-center gap-3 px-6 pr-3;
+  }
+
+  .bp-command-input-icon {
+    @apply h-[17px] w-[17px] shrink-0 text-[hsl(var(--bp-muted-foreground))];
+  }
+
+  .bp-command-input {
+    @apply h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-[17px] font-medium leading-none tracking-normal text-[hsl(var(--bp-foreground))] outline-none placeholder:text-[hsl(var(--bp-muted-foreground))];
+  }
+
+  .bp-theme-button {
+    @apply mr-4 flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-[hsl(var(--bp-muted-foreground))] outline-none transition-colors hover:bg-[hsl(var(--bp-accent))] hover:text-[hsl(var(--bp-foreground))];
+  }
+
+  .bp-command-list {
+    @apply min-h-0 flex-1 overflow-y-auto overflow-x-hidden border-0 p-0 outline-none;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .bp-command-list [cmdk-list-sizer] {
+    @apply min-h-full;
+  }
+
+  .bp-command-empty {
+    @apply px-7 py-6 text-sm text-[hsl(var(--bp-muted-foreground))];
+  }
+
+  .bp-command-group [cmdk-group-heading] {
+    @apply px-7 pb-[7px] pt-3.5 text-xs font-bold tracking-[0.09em] text-[hsl(var(--bp-muted-foreground))];
+  }
+
+  .bp-command-item {
+    @apply grid min-h-[58px] w-full cursor-pointer grid-cols-[28px_minmax(0,1fr)_56px] items-center gap-3.5 px-7 py-2 text-left text-[hsl(var(--bp-foreground))] outline-none;
+  }
+
+  .bp-command-item[data-selected="true"],
+  .bp-command-item[data-manual-selected="true"] {
+    @apply bg-[hsl(var(--bp-accent))];
+  }
+
+  .bp-command-item[data-type="search"] {
+    @apply min-h-[52px] border-0 border-t border-solid border-[hsl(var(--bp-border))];
+  }
+
+  .bp-command-item[data-type="url"] {
+    @apply min-h-[52px];
+  }
+
+  .bp-command-item[data-type="command"] {
+    @apply min-h-[52px];
+  }
+
+  .bp-icon {
+    @apply flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg bg-[hsl(var(--bp-muted))] text-[13px] font-bold text-[hsl(var(--bp-muted-foreground))];
+  }
+
+  .bp-icon img {
+    @apply block h-[18px] w-[18px] object-contain;
+  }
+
+  .bp-copy {
+    @apply grid min-w-0 gap-[3px];
+  }
+
+  .bp-title,
+  .bp-subtitle {
+    @apply block overflow-hidden text-ellipsis whitespace-nowrap tracking-normal;
+  }
+
+  .bp-title {
+    @apply text-[15px] font-semibold;
+  }
+
+  .bp-subtitle {
+    @apply text-sm font-medium text-[hsl(var(--bp-muted-foreground))];
+  }
+
+  .bp-kind {
+    @apply justify-self-end text-right text-xs font-semibold text-[hsl(var(--bp-muted-foreground))];
+  }
+
+  .bp-footer {
+    @apply flex h-8 items-center gap-4 border-0 border-t border-solid border-[hsl(var(--bp-border))] px-6 text-[11px] font-medium text-[hsl(var(--bp-muted-foreground))];
+  }
+}

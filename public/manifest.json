@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Browser Palette",
+  "description": "A local-first command palette for browsing.",
+  "version": "0.1.0",
+  "permissions": ["tabs", "storage", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "icons": {
+    "128": "icon.svg"
+  },
+  "action": {
+    "default_icon": {
+      "128": "icon.svg"
+    },
+    "default_title": "Open Browser Palette"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "open-palette": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+K",
+        "mac": "Command+Shift+K"
+      },
+      "description": "Open Browser Palette"
+    }
+  }
+}

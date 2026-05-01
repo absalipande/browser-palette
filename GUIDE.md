@@ -1,279 +1,250 @@
-# Browser Palette Guide
+# Browser Palette Implementation Guide
 
-## What We Are Building
+This guide is the internal working reference for Browser Palette. For the public
+project overview, see `README.md`. For planned work, see `ROADMAP.md`.
 
-Browser Palette is a local-first command palette for everyday browsing on macOS.
-It is inspired by Arc and Zen style command bars, but it is built around personal
-workflow rather than publishing to an extension store.
+## Product Shape
 
-The first target is a Chromium-compatible WebExtension because it is easiest to
-develop and load locally. Safari support can come later through Apple's Safari
-Web Extension tooling.
+Browser Palette is a local-first command palette for browser navigation.
 
-## Product Goals
+Primary jobs:
 
-- Open quickly from a keyboard shortcut.
-- Search open tabs, local history, and web search from one place.
-- Keep a private local history database independent of browser history.
-- Rank results by personal behavior: recent visits, repeated visits, and strong
-  title/domain matches.
-- Make tab switching and cleanup fast.
-- Stay lightweight, calm, and useful.
+- switch to an open tab
+- reopen personally relevant history
+- open a typed URL
+- search the web
+- run small browser-palette commands
 
-## Product Contract
+The palette should feel closer to a browser command bar than a generic launcher:
+Arc/Zen for the search surface, Raycast for keyboard clarity.
 
-This project is a local-first browser command palette built around personal
-browsing memory, not just a visual search box.
+## Current Shortcut
 
-Core feature set:
+- Current reliable shortcut: `Command+Shift+K`
+- Product ideal: `Command+T`
 
-- Maintain a built-in history database because Safari does not expose browser
-  history in the way this project needs.
-- Store useful page metadata:
-  - page title
-  - URL
-  - normalized/display URL
-  - last visited date
-  - visit count
-  - favicon data, eventually base64 with a 7 day TTL
-- Prune low-value URL noise:
-  - tracking parameters
-  - referral parameters
-  - pagination/noisy parameters where safe
-  - trailing slashes
-  - `index.html`, `index.php`, and similar default index files
-- Preserve user intent where possible:
-  - if the user types one domain and it redirects to another, keep the typed
-    domain as a strong historical result while also recording the final URL.
-- Rank history with personal behavior:
-  - recent repeated visits should beat old high-count visits
-  - title, hostname, and exact domain matches should get strong boosts
-  - open tabs should generally beat history when match quality is close
-- Support fast cleanup:
-  - `Backspace` / `Delete` on an open tab result closes the tab
-  - `Backspace` / `Delete` on a history result deletes that stored result
-- Add polish where it improves recognition:
-  - use favicons in results
-  - eventually derive an open-tab color indicator from favicon dominant color
-- Run automatic garbage collection:
-  - daily cleanup
-  - delete history entries older than 30 days with fewer than 2 visits
-  - expire favicon data after 7 days
-- Show search suggestions only when there are no strong local tab/history
-  matches.
-- Behave like a browser command bar:
-  - selected tab result switches to that tab
-  - selected history result opens in a new tab
-  - selected URL result opens the URL
-  - selected search result searches the web
-  - smart domain matching turns `youtube` into `youtube.com`
+Most browsers reserve `Command+T`, so `Command+Shift+K` is the practical local
+development shortcut.
 
-## Keyboard Shortcut Goal
-
-The ideal shortcut is `Command+T`, because the palette should feel like a
-replacement for the browser's new-tab/search flow.
-
-Important limitation: most browsers reserve `Command+T` before extensions or
-content scripts can intercept it. During development, use a reliable extension
-shortcut such as `Command+Shift+K`, then test whether the target browser allows
-remapping or overriding `Command+T`.
-
-## MVP Behavior
-
-- `Command+T` is the preferred product shortcut when the browser allows it.
-- `Command+Shift+K` is the reliable development fallback.
-- `Escape` closes the palette.
-- Typing filters available results.
-- Results include:
-  - open tab matches
-  - local history matches
-  - a web search fallback
-- `Enter` activates the selected result.
-- `Backspace` or `Delete` closes a selected open tab.
-- `Backspace` or `Delete` removes a selected local history result.
-
-## Architecture
+## Implemented Architecture
 
 ```txt
-browser-palette/
-  package.json
-  tsconfig.json
-  vite.config.ts
-  tailwind.config.ts
-  public/
-    manifest.json
-  src/
-    background/
-      index.ts
-    components/
-      ui/
-        button.tsx
-        command.tsx
-        dialog.tsx
-    content/
-      index.tsx
-    lib/
-      cn.ts
-    types.ts
-    ui/
-      palette.tsx
-      palette.css
+src/
+  background/
+    index.ts          # service worker: tabs, commands, settings, ranking
+    history-db.ts     # IndexedDB history store
+    ranking.ts        # history scoring
+  content/
+    index.tsx         # content script, Shadow DOM mount, visit capture
+  components/ui/
+    command.tsx       # local cmdk wrapper
+    dialog.tsx        # local Radix Dialog wrapper
+    button.tsx
+  ui/
+    palette.tsx       # palette UI
+    palette.css       # isolated palette CSS
+  url/
+    normalize-url.ts  # cleanup/display helpers
+  types.ts            # runtime message and result types
+
+public/
+  manifest.json
+  options.html
+  options.css
+  options.js
 ```
 
-## Stack Decision
+## Content Script Responsibilities
 
-Use TypeScript for the extension code. The browser APIs, message contracts,
-command result types, and local history records benefit from explicit types.
+- Mount the palette into a Shadow DOM host.
+- Inject `palette.css` into that shadow root.
+- Listen for `Command+Shift+K`.
+- Send visits to the background worker.
+- Ask the background worker for tab zoom and compensate for page zoom.
+- Recreate the palette host when stale versions are detected.
 
-Use React for the injected palette UI, Tailwind CSS for styling, and local
-shadcn/ui components for a modern command surface. The current primitives are
-owned in `src/components/ui` so they stay extension-safe:
+Important: do not inject palette CSS globally into pages. That causes host page
+CSS/reset/font differences to leak into the palette.
 
-- typed components
-- Radix Dialog
-- `cmdk` Command
-- `cn(...)` class merging
-- CSS variables for theme tokens
-- restrained component classes
-- system light/dark appearance via `prefers-color-scheme`
+## Background Worker Responsibilities
 
-Recommended path:
+- Toggle palette in the active tab.
+- Inject current content script into stale normal webpages.
+- Reject restricted pages and open settings instead.
+- Query open tabs.
+- Rank tab/history/url/search/command results.
+- Activate selected results.
+- Delete selected tab/history entries.
+- Store settings in `chrome.storage.local`.
+- Run daily history garbage collection.
 
-1. Build with Vite + TypeScript.
-2. Style with Tailwind CSS.
-3. Keep shadcn-style components local and extension-safe.
-4. Add Radix/shadcn pieces only when they solve a real interaction problem.
+## Runtime Messages
 
-## Main Pieces
+Defined in `src/types.ts`.
 
-### Content Script
+Current key message families:
 
-Responsible for:
+- `palette:status`
+- `palette:toggle`
+- `tab:zoom`
+- `palette:results`
+- `palette:activate`
+- `palette:delete`
+- `visit:record`
+- `theme:*`
+- `open-behavior:*`
 
-- injecting the palette UI into pages
-- listening for the keyboard shortcut
-- capturing page title and URL
-- sending visit information to the background script
+Keep message contracts typed. The background worker and content/UI code rely on
+these as the extension boundary.
 
-### Background Script
+## Result Types
 
-Responsible for:
+Current palette result kinds:
 
-- reading open tabs
-- switching tabs
-- closing tabs
-- opening search results
-- opening web searches
-- later: writing local visit records and running cleanup tasks
+- `tab`
+- `history`
+- `url`
+- `search`
+- `command`
 
-### Local History Database
+Rows may include optional `meta` for right-side display, such as:
 
-Stored in IndexedDB.
+- `Current tab`
+- `4 visits • 2d ago`
+- `Open`
+- `Theme`
+- `Open mode`
 
-Initial history record shape:
+## Ranking Rules
 
-```ts
-type HistoryEntry = {
-  id: string;
-  url: string;
-  displayUrl: string;
-  normalizedUrl: string;
-  title: string;
-  hostname: string;
-  lastVisitedAt: number;
-  visitCount: number;
-  favicon?: string;
-  faviconExpiresAt?: number;
-};
-```
+Empty query:
 
-### URL Normalization
+- show up to 5 open tabs first
+- show up to 5 history results next
+- open tabs are ordered by active tab first, then tab index
+- history is ordered by behavior score
 
-Normalize stored URLs so the palette is cleaner than raw browser history.
+Typed query:
 
-Initial cleanup rules:
+- open tabs are scored by title, URL, hostname, and active-tab boost
+- history is scored by text match + behavior score
+- first row becomes `BEST MATCH`
+- URL fallback appears only after local matches
+- web search remains available
 
-- remove common tracking params such as `utm_*`, `fbclid`, `gclid`
-- strip trailing slashes
-- strip `index.html`, `index.php`, and similar index filenames
-- preserve a pretty display URL
-- keep enough original URL information for useful matching
+## History Storage
 
-### Ranking
+History uses IndexedDB under the extension origin.
 
-Result scoring should consider:
+Stored fields:
 
-- exact query match
-- title match
-- hostname match
-- URL match
-- visit count
-- last visited date
-- whether the result is an open tab
+- `normalizedUrl`
+- `url`
+- `displayUrl`
+- `hostname`
+- `title`
+- `firstVisitedAt`
+- `lastVisitedAt`
+- `visitCount`
+- `faviconUrl`
+- `faviconExpiresAt`
 
-Open tabs should generally beat history results when the match quality is close.
+Daily garbage collection:
 
-## Later Features
+- delete entries older than 30 days with fewer than 2 visits
+- clear expired favicons after 7 days
 
-- favicon capture
-- dominant favicon color for tab indicators
-- smart domain matching with known TLDs
-- search suggestions when there are no strong local matches
-- daily garbage collection
-- manual clear history command
-- Safari conversion
+## URL Normalization
 
-## Garbage Collection Rules
+`src/url/normalize-url.ts` removes common tracking noise:
 
-Daily cleanup should:
+- `utm_*`
+- `fbclid`
+- `gclid`
+- `igshid`
+- `mibextid`
+- `rdt`
+- empty query params
+- selected referral params
 
-- delete history entries older than 30 days with fewer than 2 visits
-- expire favicon data after 7 days
+It also strips:
 
-## Local Development Plan
+- hash fragments
+- `www.`
+- trailing slashes
+- default index filenames like `index.html` and `index.php`
 
-1. Scaffold the extension.
-2. Load it unpacked in a Chromium browser.
-3. Build the palette UI.
-4. Add open tab search.
-5. Add IndexedDB local history.
-6. Add ranking and URL cleanup.
-7. Polish keyboard actions.
-8. Convert to Safari after the core experience feels right.
+## UI Notes
 
-## Current Local Run Steps
+The palette UI must remain:
 
-The current version uses a Vite build step.
+- consistent across websites
+- keyboard-first
+- compact
+- clear at different page zoom levels
+- theme-aware
 
-Install dependencies once:
+Important implementation details:
+
+- Use Shadow DOM for isolation.
+- Use explicit focus handling on dialog open.
+- Use explicit wheel handling for scroll reliability.
+- Use `chrome.tabs.getZoom` to compensate for per-tab page zoom.
+- Keep row heights stable.
+- Keep right-side shortcut/meta text bounded.
+
+## Local Development
+
+Install:
 
 ```bash
 npm install
 ```
 
-Build the extension:
+Build:
 
 ```bash
 npm run build
 ```
 
-In Chrome, Arc, Brave, or another Chromium browser:
-
-1. Open `chrome://extensions`.
-2. Enable developer mode.
-3. Choose `Load unpacked`.
-4. Select the `browser-palette/dist` folder.
-5. Open any normal webpage.
-6. Press `Command+Shift+K` to open the palette.
-
-`Command+T` remains the product goal, but the current MVP uses
-`Command+Shift+K` because browsers usually reserve `Command+T`.
-
-For development, run:
+Watch build:
 
 ```bash
 npm run dev
 ```
 
-This runs a watch build. When files change, return to `chrome://extensions` and
-reload the extension.
+Load locally:
+
+1. Open `chrome://extensions`
+2. Enable Developer Mode
+3. Click `Load unpacked`
+4. Select `dist/`
+5. Reload extension after each build
+
+## Safari Plan
+
+Safari support should come after the Chromium local v1 feels stable.
+
+Planned approach:
+
+1. Keep the extension source WebExtension-compatible.
+2. Build `dist/`.
+3. Create a Safari Web Extension wrapper in Xcode.
+4. Copy or sync `dist/` into the wrapper.
+5. Test local installation in Safari.
+6. Patch browser API differences only where necessary.
+
+## Testing Checklist
+
+Manual smoke tests:
+
+- open palette on Facebook, YouTube, Reddit, Twitch
+- test a tab at 80% zoom and another at 100% zoom
+- type common domains like `you`, `face`, `red`
+- activate tab, history, URL, search, and command results
+- delete one tab result
+- delete one history result
+- open restricted page like `chrome://extensions`
+- verify options page opens
+- switch light/dark/system themes
+- switch current/new-tab open mode

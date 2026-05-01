@@ -14,7 +14,7 @@ import {
 import { scoreHistoryEntry } from "./ranking";
 
 const SEARCH_URL = "https://www.google.com/search?q=";
-const CONTENT_SCRIPT_VERSION = "0.1.2";
+const CONTENT_SCRIPT_VERSION = "0.1.5";
 chrome.commands.onCommand.addListener(async (command) => {
   if (command !== "open-palette") {
     return;
@@ -28,7 +28,10 @@ chrome.action.onClicked.addListener(async () => {
 });
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.set({ lastGarbageCollectionAt: 0 });
+  chrome.storage.local.set({
+    lastGarbageCollectionAt: 0,
+    openBehaviorPreference: "new-tab"
+  });
 });
 
 chrome.runtime.onStartup.addListener(() => {
@@ -136,6 +139,8 @@ async function getPaletteResults(query: string): Promise<PaletteResult[]> {
       title: tab.title || tab.url || "Untitled tab",
       subtitle: tab.url || "",
       faviconUrl: tab.favIconUrl || "",
+      active: Boolean(tab.active),
+      index: tab.index ?? 0,
       score: scoreTabResult(tab, normalizedQuery)
     }))
     .filter((result) => {
@@ -148,21 +153,10 @@ async function getPaletteResults(query: string): Promise<PaletteResult[]> {
 
   const tabResults = (normalizedQuery
     ? scoredTabResults.sort((a, b) => b.score - a.score).slice(0, 5)
-    : scoredTabResults
-  ).map(({ score: _score, ...result }) => result);
+    : scoredTabResults.sort((a, b) => Number(b.active) - Number(a.active) || a.index - b.index).slice(0, 7)
+  ).map(({ active: _active, index: _index, score: _score, ...result }) => result);
 
   const results: PaletteResult[] = [];
-
-  if (normalizedQuery) {
-    const urlResult =
-      getOpenTabUrlResult(query.trim(), tabResults) ||
-      getHistoryUrlResult(query.trim(), historyEntries) ||
-      getUrlResult(query.trim());
-
-    if (urlResult) {
-      results.push(urlResult);
-    }
-  }
 
   results.push(...tabResults);
 
@@ -181,12 +175,18 @@ async function getPaletteResults(query: string): Promise<PaletteResult[]> {
     }))
     .filter((result) => result.score > (normalizedQuery ? 12 : 0))
     .sort((a, b) => b.score - a.score)
-    .slice(0, normalizedQuery ? 5 : 3)
+    .slice(0, normalizedQuery ? 5 : 5)
     .map(({ score: _score, ...result }) => result);
 
   results.push(...historyResults);
 
   if (normalizedQuery) {
+    const urlResult = getHistoryUrlResult(query.trim(), historyEntries) || getUrlResult(query.trim());
+
+    if (urlResult && !results.some((result) => resultUrl(result) === urlResult.url)) {
+      results.push(urlResult);
+    }
+
     const commandResults = getCommandResults(normalizedQuery);
 
     if (commandResults.length > 0) {
@@ -203,6 +203,18 @@ async function getPaletteResults(query: string): Promise<PaletteResult[]> {
   }
 
   return results;
+}
+
+function resultUrl(result: PaletteResult) {
+  if (result.type === "url" || result.type === "history") {
+    return result.url;
+  }
+
+  if (result.type === "tab") {
+    return result.subtitle;
+  }
+
+  return "";
 }
 
 async function activateResult(result: PaletteResult, currentTab?: chrome.tabs.Tab) {
@@ -270,7 +282,7 @@ async function runCommand(command: Extract<PaletteResult, { type: "command" }>["
   return { ok: false, error: "Unknown command" };
 }
 
-function getUrlResult(query: string): PaletteResult | null {
+function getUrlResult(query: string): Extract<PaletteResult, { type: "url" }> | null {
   const url = normalizeOpenUrl(query);
 
   if (!url) {
@@ -322,31 +334,10 @@ function formatUrlTitle(url: string) {
   }
 }
 
-function getOpenTabUrlResult(
+function getHistoryUrlResult(
   query: string,
-  tabResults: Extract<PaletteResult, { type: "tab" }>[]
-): PaletteResult | null {
-  const normalizedQuery = query.toLowerCase();
-  const matchedTab = tabResults.find((tab) => {
-    const hostname = hostnameFromRawUrl(tab.subtitle);
-    return hostname === normalizedQuery || hostname.startsWith(normalizedQuery);
-  });
-
-  if (!matchedTab?.subtitle) {
-    return null;
-  }
-
-  return {
-    type: "url",
-    id: `url:${matchedTab.subtitle}`,
-    title: `Open ${formatUrlTitle(matchedTab.subtitle)}`,
-    subtitle: matchedTab.subtitle,
-    url: matchedTab.subtitle,
-    faviconUrl: matchedTab.faviconUrl || faviconUrlForUrl(matchedTab.subtitle)
-  };
-}
-
-function getHistoryUrlResult(query: string, historyEntries: HistoryEntry[]): PaletteResult | null {
+  historyEntries: HistoryEntry[]
+): Extract<PaletteResult, { type: "url" }> | null {
   const normalizedQuery = query.toLowerCase();
   const match = historyEntries
     .filter((entry) => {
@@ -496,11 +487,11 @@ async function getThemePreference() {
 async function getOpenBehaviorPreference(): Promise<OpenBehaviorPreference> {
   const stored = await chrome.storage.local.get("openBehaviorPreference");
 
-  if (stored.openBehaviorPreference === "new-tab") {
-    return "new-tab";
+  if (stored.openBehaviorPreference === "current-tab") {
+    return "current-tab";
   }
 
-  return "current-tab";
+  return "new-tab";
 }
 
 async function openUrl(url: string, currentTab?: chrome.tabs.Tab) {

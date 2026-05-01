@@ -105,7 +105,7 @@
   }
 
   .bp-command {
-    @apply flex min-h-0 flex-1 flex-col overflow-hidden bg-[hsl(var(--bp-background))];
+    @apply flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[hsl(var(--bp-background))];
   }
 
   .bp-command *,
@@ -136,13 +136,15 @@
   }
 
   .bp-command-list {
-    @apply min-h-0 flex-1 overflow-y-auto overflow-x-hidden border-0 p-0 outline-none;
+    max-height: 100%;
+    scrollbar-gutter: stable;
+    @apply h-full min-h-0 flex-1 overflow-y-auto overflow-x-hidden border-0 p-0 outline-none;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
   }
 
   .bp-command-list [cmdk-list-sizer] {
-    @apply min-h-full;
+    @apply min-h-full pb-1;
   }
 
   .bp-command-empty {
@@ -204,6 +206,10 @@
   }
 
   .bp-footer {
-    @apply flex h-8 items-center gap-4 border-0 border-t border-solid border-[hsl(var(--bp-border))] px-6 text-[11px] font-medium text-[hsl(var(--bp-muted-foreground))];
+    @apply flex min-h-9 flex-wrap items-center gap-x-5 gap-y-1 border-0 border-t border-solid border-[hsl(var(--bp-border))] px-6 py-2 text-[11px] font-medium text-[hsl(var(--bp-muted-foreground))];
+  }
+
+  .bp-footer span {
+    @apply whitespace-nowrap;
   }
 }

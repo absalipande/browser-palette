@@ -34,12 +34,15 @@ export function Palette({ onOpenChange }: { onOpenChange: (open: boolean) => voi
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PaletteResult[]>([]);
   const [theme, setTheme] = useState<ThemePreference>("system");
-  const [openBehavior, setOpenBehavior] = useState<OpenBehaviorPreference>("current-tab");
+  const [openBehavior, setOpenBehavior] = useState<OpenBehaviorPreference>("new-tab");
   const [selectedResultId, setSelectedResultId] = useState<string>("");
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
   const requestIdRef = useRef(0);
+  const deletingResultIdRef = useRef<string | null>(null);
+  const selectTopOnNextResultsRef = useRef(false);
 
-  const groupedResults = useMemo(() => groupResults(results), [results]);
+  const groupedResults = useMemo(() => groupResults(results, query), [results, query]);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -57,11 +60,18 @@ export function Palette({ onOpenChange }: { onOpenChange: (open: boolean) => voi
 
     if (response.ok && requestId === requestIdRef.current) {
       setResults(response.results);
-      setSelectedResultId((currentId) =>
-        response.results.some((result) => result.id === currentId)
+      setSelectedResultId((currentId) => {
+        if (selectTopOnNextResultsRef.current) {
+          selectTopOnNextResultsRef.current = false;
+          return response.results[0]?.id || "";
+        }
+
+        return response.results.some((result) => result.id === currentId)
           ? currentId
-          : response.results[0]?.id || ""
-      );
+          : response.results[0]?.id || "";
+      });
+
+      listRef.current?.scrollTo({ top: 0 });
     }
   }, []);
 
@@ -92,7 +102,9 @@ export function Palette({ onOpenChange }: { onOpenChange: (open: boolean) => voi
       onOpenChange(nextOpen);
 
       if (nextOpen) {
+        selectTopOnNextResultsRef.current = true;
         setQuery("");
+        setSelectedResultId("");
         refreshResults("");
         requestAnimationFrame(() => inputRef.current?.focus());
       }
@@ -122,31 +134,45 @@ export function Palette({ onOpenChange }: { onOpenChange: (open: boolean) => voi
   }
 
   async function deleteResult(result: PaletteResult) {
-    const deletedIndex = results.findIndex((item) => item.id === result.id);
-    const response = await chrome.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
-      type: "palette:delete",
-      result
-    });
+    if (deletingResultIdRef.current || (result.type !== "tab" && result.type !== "history")) {
+      return;
+    }
 
-    if (response.ok) {
-      const nextResultsResponse = await chrome.runtime.sendMessage<RuntimeMessage, ResultsResponse>({
-        type: "palette:results",
-        query
+    deletingResultIdRef.current = result.id;
+    try {
+      const deletedIndex = results.findIndex((item) => item.id === result.id);
+      const response = await chrome.runtime.sendMessage<RuntimeMessage, RuntimeResponse>({
+        type: "palette:delete",
+        result
       });
 
-      if (nextResultsResponse.ok) {
-        const nextResults = nextResultsResponse.results;
-        const nextIndex = Math.min(Math.max(deletedIndex, 0), nextResults.length - 1);
-        setResults(nextResults);
-        setSelectedResultId(nextResults[nextIndex]?.id || "");
+      if (response.ok) {
+        const nextResultsResponse = await chrome.runtime.sendMessage<RuntimeMessage, ResultsResponse>({
+          type: "palette:results",
+          query
+        });
+
+        if (nextResultsResponse.ok) {
+          const nextResults = nextResultsResponse.results;
+          const nextIndex = Math.min(Math.max(deletedIndex, 0), nextResults.length - 1);
+          setResults(nextResults);
+          setSelectedResultId(nextResults[nextIndex]?.id || "");
+        }
       }
+    } finally {
+      deletingResultIdRef.current = null;
     }
   }
 
   function handleCommandKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.repeat) {
+      return;
+    }
+
     if (
       (event.key === "Backspace" || event.key === "Delete") &&
-      (document.activeElement !== inputRef.current || query === "")
+      selectedResultId &&
+      (!isInputFocused() || (event.key === "Delete" && query === ""))
     ) {
       const selected = getSelectedResult();
 
@@ -180,6 +206,27 @@ export function Palette({ onOpenChange }: { onOpenChange: (open: boolean) => voi
     activateResult(result);
   }
 
+  function handleDialogWheel(event: React.WheelEvent<HTMLDivElement>) {
+    const list = listRef.current;
+
+    if (!list || !open) {
+      return;
+    }
+
+    const maxScrollTop = list.scrollHeight - list.clientHeight;
+
+    if (maxScrollTop <= 0) {
+      return;
+    }
+
+    const nextScrollTop = Math.max(0, Math.min(maxScrollTop, list.scrollTop + event.deltaY));
+
+    if (nextScrollTop !== list.scrollTop) {
+      list.scrollTop = nextScrollTop;
+      event.preventDefault();
+    }
+  }
+
   async function cycleTheme() {
     const nextTheme = theme === "system" ? "light" : theme === "light" ? "dark" : "system";
     setTheme(nextTheme);
@@ -202,13 +249,26 @@ export function Palette({ onOpenChange }: { onOpenChange: (open: boolean) => voi
   }
 
   function getSelectedResult() {
-    return results.find((result) => result.id === selectedResultId) || results[0];
+    return results.find((result) => result.id === selectedResultId);
+  }
+
+  function isInputFocused() {
+    const input = inputRef.current;
+
+    if (!input) {
+      return false;
+    }
+
+    const root = input.getRootNode();
+    return root instanceof ShadowRoot
+      ? root.activeElement === input
+      : document.activeElement === input;
   }
 
   return (
     <div className="bp-root" data-theme={theme}>
       <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? setOpen(true) : close())}>
-        <DialogContent aria-label="Browser Palette">
+        <DialogContent aria-label="Browser Palette" onWheelCapture={handleDialogWheel}>
           <DialogTitle className="bp-sr-only">Browser Palette</DialogTitle>
           <Command
             filter={() => 1}
@@ -221,7 +281,7 @@ export function Palette({ onOpenChange }: { onOpenChange: (open: boolean) => voi
               <CommandInput
                 autoFocus
                 onValueChange={setQuery}
-                placeholder="Search tabs or the web"
+                placeholder="Search tabs, history, or the web"
                 ref={inputRef}
                 value={query}
               />
@@ -235,7 +295,7 @@ export function Palette({ onOpenChange }: { onOpenChange: (open: boolean) => voi
                 {themeIcon(theme)}
               </button>
             </div>
-            <CommandList>
+            <CommandList ref={listRef}>
               <CommandEmpty>Start typing to search.</CommandEmpty>
               {groupedResults.map((group) => (
                 <CommandGroup heading={group.label} key={group.label || "action"}>
@@ -276,8 +336,8 @@ export function Palette({ onOpenChange }: { onOpenChange: (open: boolean) => voi
           <div className="bp-footer">
             <span>↵ Open</span>
             <span>⌘1-9 Quick open</span>
-            <span>⌫ Delete tab/history</span>
-            <span>{openBehavior === "current-tab" ? "Opens in current tab" : "Opens in new tab"}</span>
+            <span>⌫ Delete selected</span>
+            <span>{openBehavior === "current-tab" ? "Current tab mode" : "New tab mode"}</span>
           </div>
         </DialogContent>
       </Dialog>
@@ -285,18 +345,17 @@ export function Palette({ onOpenChange }: { onOpenChange: (open: boolean) => voi
   );
 }
 
-function groupResults(results: PaletteResult[]) {
+function groupResults(results: PaletteResult[], query: string) {
   const groups: Array<{ label: string; results: PaletteResult[] }> = [];
+  const trimmedQuery = query.trim();
+  const groupedInput = trimmedQuery ? results.slice(1) : results;
 
-  for (const result of results) {
-    const label =
-      result.type === "url"
-        ? "GO TO"
-        : result.type === "tab"
-          ? "OPEN TABS"
-          : result.type === "history"
-            ? "HISTORY"
-            : "SEARCH";
+  if (trimmedQuery && results[0]) {
+    groups.push({ label: "BEST MATCH", results: [results[0]] });
+  }
+
+  for (const result of groupedInput) {
+    const label = labelForResult(result);
     const existing = groups.find((group) => group.label === label);
 
     if (existing) {
@@ -307,6 +366,14 @@ function groupResults(results: PaletteResult[]) {
   }
 
   return groups;
+}
+
+function labelForResult(result: PaletteResult) {
+  if (result.type === "tab") return "OPEN TABS";
+  if (result.type === "history") return "HISTORY";
+  if (result.type === "url") return "GO TO";
+  if (result.type === "command") return "COMMANDS";
+  return "SEARCH WEB";
 }
 
 function iconFor(result: PaletteResult) {
@@ -332,11 +399,11 @@ function iconFor(result: PaletteResult) {
 }
 
 function kindFor(result: PaletteResult) {
-  if (result.type === "tab") return "Tab";
+  if (result.type === "tab") return "Open tab";
   if (result.type === "url") return "Open";
   if (result.type === "history") return "History";
   if (result.type === "command") return "Command";
-  return "Search";
+  return "Google";
 }
 
 function themeIcon(theme: ThemePreference) {

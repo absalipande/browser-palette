@@ -1,0 +1,5 @@
+The scrollbar is not working even though you click into the modal
+Whenever we open the search bar it should always show the first one or the top
+When I delete/backspace it also deleted all existing tabs
+When we open a new tab it should open a new tab and not replace the current tab
+Fix the footer it looks so cramped

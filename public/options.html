@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Browser Palette Settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="options-shell">
+      <section class="options-panel">
+        <header class="options-header">
+          <h1 class="options-title">Browser Palette</h1>
+          <p class="options-copy">Local settings for your tab, history, and web command palette.</p>
+        </header>
+
+        <section class="options-section">
+          <div class="options-label">APPEARANCE</div>
+          <div class="options-row" id="theme-controls"></div>
+        </section>
+
+        <section class="options-section">
+          <div class="options-label">OPEN RESULTS</div>
+          <div class="options-row" id="open-controls"></div>
+        </section>
+
+        <section class="options-section">
+          <div class="options-label">LOCAL DATA</div>
+          <div class="options-row">
+            <button class="options-button" data-danger="true" id="clear-history" type="button">
+              Clear local history
+            </button>
+          </div>
+          <div class="options-status" id="status"></div>
+        </section>
+      </section>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

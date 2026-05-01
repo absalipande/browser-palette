@@ -2,11 +2,16 @@ const TRACKING_PARAMS = new Set([
   "fbclid",
   "gclid",
   "igshid",
+  "mibextid",
   "mc_cid",
   "mc_eid",
+  "ncid",
+  "rdt",
   "ref",
   "ref_src",
-  "spm"
+  "spm",
+  "trk",
+  "vero_id"
 ]);
 
 export function normalizeUrl(rawUrl: string) {
@@ -18,13 +23,20 @@ export function normalizeUrl(rawUrl: string) {
     }
 
     for (const key of [...url.searchParams.keys()]) {
-      if (key.startsWith("utm_") || TRACKING_PARAMS.has(key.toLowerCase())) {
+      const normalizedKey = key.toLowerCase();
+
+      if (
+        normalizedKey.startsWith("utm_") ||
+        normalizedKey.startsWith("yclid") ||
+        TRACKING_PARAMS.has(normalizedKey) ||
+        url.searchParams.get(key) === ""
+      ) {
         url.searchParams.delete(key);
       }
     }
 
     url.hash = "";
-    url.hostname = url.hostname.toLowerCase();
+    url.hostname = url.hostname.toLowerCase().replace(/^www\./, "");
     url.pathname = url.pathname.replace(/\/(index|default)\.(html?|php|aspx?)$/i, "/");
     url.pathname = url.pathname.replace(/\/+$/g, "");
 

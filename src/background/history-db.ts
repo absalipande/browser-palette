@@ -73,7 +73,9 @@ export function getHistoryEntries() {
   return withStore("readonly", (store) => getAllEntries(store));
 }
 
-export function recordVisit(visit: VisitRecord) {
+export async function recordVisit(visit: VisitRecord) {
+  const faviconUrl = await resolveCachedFavicon(visit.faviconUrl);
+
   return withStore("readwrite", async (store) => {
     if (!visit.normalizedUrl || !visit.url) {
       return null;
@@ -84,15 +86,50 @@ export function recordVisit(visit: VisitRecord) {
     const entry: HistoryEntry = {
       ...existing,
       ...visit,
+      faviconUrl: faviconUrl || existing?.faviconUrl || "",
       title: visit.title || existing?.title || visit.hostname || visit.url,
       firstVisitedAt: existing?.firstVisitedAt || now,
       lastVisitedAt: now,
       visitCount: (existing?.visitCount || 0) + 1,
-      faviconExpiresAt: visit.faviconUrl ? now + FAVICON_TTL : existing?.faviconExpiresAt
+      faviconExpiresAt: faviconUrl ? now + FAVICON_TTL : existing?.faviconExpiresAt
     };
 
     store.put(entry);
     return entry;
+  });
+}
+
+async function resolveCachedFavicon(faviconUrl?: string) {
+  if (!faviconUrl || !/^https?:\/\//i.test(faviconUrl)) {
+    return "";
+  }
+
+  try {
+    const response = await fetch(faviconUrl);
+
+    if (!response.ok) {
+      return faviconUrl;
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    const blob = await response.blob();
+
+    if (!contentType.startsWith("image/") || blob.size > 80_000) {
+      return faviconUrl;
+    }
+
+    return await blobToDataUrl(blob);
+  } catch {
+    return faviconUrl;
+  }
+}
+
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
   });
 }
 

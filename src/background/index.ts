@@ -14,7 +14,7 @@ import {
 import { scoreHistoryEntry } from "./ranking";
 
 const SEARCH_URL = "https://www.google.com/search?q=";
-const CONTENT_SCRIPT_VERSION = "0.1.5";
+const CONTENT_SCRIPT_VERSION = "0.1.9";
 chrome.commands.onCommand.addListener(async (command) => {
   if (command !== "open-palette") {
     return;
@@ -45,6 +45,11 @@ async function togglePaletteInActiveTab() {
     return;
   }
 
+  if (!isInjectableTab(tab)) {
+    await chrome.runtime.openOptionsPage();
+    return;
+  }
+
   try {
     await ensureCurrentContentScript({ ...tab, id: tab.id });
     await chrome.tabs.sendMessage(tab.id, { type: "palette:toggle" });
@@ -63,7 +68,7 @@ async function ensureCurrentContentScript(tab: chrome.tabs.Tab & { id: number })
 }
 
 async function injectPaletteIntoTab(tab: chrome.tabs.Tab & { id: number }) {
-  if (!tab.url || !/^https?:\/\//i.test(tab.url)) {
+  if (!isInjectableTab(tab)) {
     return;
   }
 
@@ -71,6 +76,10 @@ async function injectPaletteIntoTab(tab: chrome.tabs.Tab & { id: number }) {
     target: { tabId: tab.id },
     files: ["content.js"]
   });
+}
+
+function isInjectableTab(tab: chrome.tabs.Tab) {
+  return Boolean(tab.url && /^https?:\/\//i.test(tab.url));
 }
 
 chrome.runtime.onMessage.addListener(
@@ -106,6 +115,9 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
       await chrome.storage.local.set({ openBehaviorPreference: message.behavior });
       return { ok: true, behavior: message.behavior };
 
+    case "tab:zoom":
+      return { ok: true, zoom: await getSenderTabZoom(sender.tab) };
+
     case "palette:results":
       return { ok: true, results: await getPaletteResults(message.query) };
 
@@ -117,6 +129,18 @@ async function handleMessage(message: RuntimeMessage, sender: chrome.runtime.Mes
 
     default:
       return { ok: false, error: "Unknown message type" };
+  }
+}
+
+async function getSenderTabZoom(tab?: chrome.tabs.Tab) {
+  if (!tab?.id) {
+    return 1;
+  }
+
+  try {
+    return await chrome.tabs.getZoom(tab.id);
+  } catch {
+    return 1;
   }
 }
 
@@ -139,6 +163,7 @@ async function getPaletteResults(query: string): Promise<PaletteResult[]> {
       title: tab.title || tab.url || "Untitled tab",
       subtitle: tab.url || "",
       faviconUrl: tab.favIconUrl || "",
+      meta: tab.active ? "Current tab" : undefined,
       active: Boolean(tab.active),
       index: tab.index ?? 0,
       score: scoreTabResult(tab, normalizedQuery)
@@ -153,7 +178,7 @@ async function getPaletteResults(query: string): Promise<PaletteResult[]> {
 
   const tabResults = (normalizedQuery
     ? scoredTabResults.sort((a, b) => b.score - a.score).slice(0, 5)
-    : scoredTabResults.sort((a, b) => Number(b.active) - Number(a.active) || a.index - b.index).slice(0, 7)
+    : scoredTabResults.sort((a, b) => Number(b.active) - Number(a.active) || a.index - b.index).slice(0, 5)
   ).map(({ active: _active, index: _index, score: _score, ...result }) => result);
 
   const results: PaletteResult[] = [];
@@ -171,6 +196,7 @@ async function getPaletteResults(query: string): Promise<PaletteResult[]> {
       faviconUrl: entry.faviconUrl || "",
       visitCount: entry.visitCount,
       lastVisitedAt: entry.lastVisitedAt,
+      meta: formatHistoryMeta(entry),
       score: scoreHistoryEntry(entry, normalizedQuery)
     }))
     .filter((result) => result.score > (normalizedQuery ? 12 : 0))
@@ -198,11 +224,34 @@ async function getPaletteResults(query: string): Promise<PaletteResult[]> {
       id: `search:${normalizedQuery}`,
       title: `Search for "${query.trim()}"`,
       subtitle: "Google Search",
-      query: query.trim()
+      query: query.trim(),
+      meta: "Search"
     });
   }
 
   return results;
+}
+
+function formatHistoryMeta(entry: HistoryEntry) {
+  const visitLabel = entry.visitCount === 1 ? "1 visit" : `${entry.visitCount} visits`;
+  const ageLabel = formatRelativeTime(entry.lastVisitedAt);
+  return `${visitLabel} • ${ageLabel}`;
+}
+
+function formatRelativeTime(timestamp: number) {
+  const ageMinutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+
+  if (ageMinutes < 1) return "just now";
+  if (ageMinutes < 60) return `${ageMinutes}m ago`;
+
+  const ageHours = Math.floor(ageMinutes / 60);
+  if (ageHours < 24) return `${ageHours}h ago`;
+
+  const ageDays = Math.floor(ageHours / 24);
+  if (ageDays < 30) return `${ageDays}d ago`;
+
+  const ageMonths = Math.floor(ageDays / 30);
+  return `${ageMonths}mo ago`;
 }
 
 function resultUrl(result: PaletteResult) {
@@ -272,11 +321,22 @@ async function runCommand(command: Extract<PaletteResult, { type: "command" }>["
     return { ok: true };
   }
 
+  if (command === "open-current-tab" || command === "open-new-tab") {
+    const openBehaviorPreference = command === "open-current-tab" ? "current-tab" : "new-tab";
+    await chrome.storage.local.set({ openBehaviorPreference });
+    return { ok: true, behavior: openBehaviorPreference };
+  }
+
   if (command === "toggle-open-behavior") {
     const current = await getOpenBehaviorPreference();
     const next = current === "current-tab" ? "new-tab" : "current-tab";
     await chrome.storage.local.set({ openBehaviorPreference: next });
     return { ok: true, behavior: next };
+  }
+
+  if (command === "open-settings") {
+    await chrome.runtime.openOptionsPage();
+    return { ok: true };
   }
 
   return { ok: false, error: "Unknown command" };
@@ -295,7 +355,8 @@ function getUrlResult(query: string): Extract<PaletteResult, { type: "url" }> | 
     title: `Open ${formatUrlTitle(url)}`,
     subtitle: url,
     url,
-    faviconUrl: faviconUrlForUrl(url)
+    faviconUrl: faviconUrlForUrl(url),
+    meta: "Open"
   };
 }
 
@@ -363,7 +424,8 @@ function getHistoryUrlResult(
     title: `Open ${formatUrlTitle(match.url)}`,
     subtitle: match.displayUrl || match.url,
     url: match.url,
-    faviconUrl: match.faviconUrl || faviconUrlForUrl(match.url)
+    faviconUrl: match.faviconUrl || faviconUrlForUrl(match.url),
+    meta: "Open"
   };
 }
 
@@ -395,39 +457,72 @@ function getCommandResults(query: string): PaletteResult[] {
       id: "command:clear-history",
       title: "Clear local history",
       subtitle: "Remove stored Browser Palette history",
-      command: "clear-history"
+      command: "clear-history",
+      meta: "Reset"
     },
     {
       type: "command",
       id: "command:theme-system",
       title: "Theme: system",
       subtitle: "Follow macOS appearance",
-      command: "theme-system"
+      command: "theme-system",
+      meta: "Theme"
     },
     {
       type: "command",
       id: "command:theme-light",
       title: "Theme: light",
       subtitle: "Use light palette appearance",
-      command: "theme-light"
+      command: "theme-light",
+      meta: "Theme"
     },
     {
       type: "command",
       id: "command:theme-dark",
       title: "Theme: dark",
       subtitle: "Use dark palette appearance",
-      command: "theme-dark"
+      command: "theme-dark",
+      meta: "Theme"
+    },
+    {
+      type: "command",
+      id: "command:open-current-tab",
+      title: "Open in current tab",
+      subtitle: "Use the current tab for URL and search results",
+      command: "open-current-tab",
+      meta: "Open mode"
+    },
+    {
+      type: "command",
+      id: "command:open-new-tab",
+      title: "Open in new tab",
+      subtitle: "Create a new tab for URL and search results",
+      command: "open-new-tab",
+      meta: "Open mode"
     },
     {
       type: "command",
       id: "command:toggle-open-behavior",
       title: "Toggle open behavior",
       subtitle: "Switch URL/search between current tab and new tab",
-      command: "toggle-open-behavior"
+      command: "toggle-open-behavior",
+      meta: "Open mode"
+    },
+    {
+      type: "command",
+      id: "command:open-settings",
+      title: "Open Browser Palette settings",
+      subtitle: "Manage theme, open behavior, and local history",
+      command: "open-settings",
+      meta: "Settings"
     }
   ];
 
-  if (!["clear", "theme", "dark", "light", "system", "open", "new", "tab"].some((term) => query.includes(term))) {
+  if (
+    !["clear", "theme", "dark", "light", "system", "open", "new", "tab", "current", "settings"].some((term) =>
+      query.includes(term)
+    )
+  ) {
     return [];
   }
 

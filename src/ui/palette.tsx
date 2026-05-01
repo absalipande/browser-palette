@@ -106,7 +106,7 @@ export function Palette({ onOpenChange }: { onOpenChange: (open: boolean) => voi
         setQuery("");
         setSelectedResultId("");
         refreshResults("");
-        requestAnimationFrame(() => inputRef.current?.focus());
+        focusInput();
       }
     };
 
@@ -227,6 +227,18 @@ export function Palette({ onOpenChange }: { onOpenChange: (open: boolean) => voi
     }
   }
 
+  function handleOpenAutoFocus(event: Event) {
+    event.preventDefault();
+    focusInput();
+  }
+
+  function focusInput() {
+    requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true });
+      setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 25);
+    });
+  }
+
   async function cycleTheme() {
     const nextTheme = theme === "system" ? "light" : theme === "light" ? "dark" : "system";
     setTheme(nextTheme);
@@ -268,7 +280,11 @@ export function Palette({ onOpenChange }: { onOpenChange: (open: boolean) => voi
   return (
     <div className="bp-root" data-theme={theme}>
       <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? setOpen(true) : close())}>
-        <DialogContent aria-label="Browser Palette" onWheelCapture={handleDialogWheel}>
+        <DialogContent
+          aria-label="Browser Palette"
+          onOpenAutoFocus={handleOpenAutoFocus}
+          onWheelCapture={handleDialogWheel}
+        >
           <DialogTitle className="bp-sr-only">Browser Palette</DialogTitle>
           <Command
             filter={() => 1}
@@ -297,40 +313,49 @@ export function Palette({ onOpenChange }: { onOpenChange: (open: boolean) => voi
             </div>
             <CommandList ref={listRef}>
               <CommandEmpty>Start typing to search.</CommandEmpty>
-              {groupedResults.map((group) => (
-                <CommandGroup heading={group.label} key={group.label || "action"}>
-                  {group.results.map((result) => {
-                    const resultIndex = results.findIndex((item) => item.id === result.id);
-                    const shortcut =
-                      resultIndex >= 0 && resultIndex < 9 ? `⌘${resultIndex + 1}` : kindFor(result);
+              {groupedResults.length === 0 ? (
+                <div className="bp-empty-state">
+                  <span className="bp-empty-title">Nothing here yet</span>
+                  <span className="bp-empty-copy">
+                    Browse a few pages, then reopen the palette to see open tabs and local history.
+                  </span>
+                </div>
+              ) : (
+                groupedResults.map((group) => (
+                  <CommandGroup heading={group.label} key={group.label || "action"}>
+                    {group.results.map((result) => {
+                      const resultIndex = results.findIndex((item) => item.id === result.id);
+                      const shortcut =
+                        resultIndex >= 0 && resultIndex < 9 ? `⌘${resultIndex + 1}` : result.meta || kindFor(result);
 
-                    return (
-                      <CommandItem
-                        data-result-id={result.id}
-                        data-manual-selected={result.id === selectedResultId}
-                        data-type={result.type}
-                        key={result.id}
-                        onMouseEnter={() => setSelectedResultId(result.id)}
-                        onSelect={() => activateResult(result)}
-                        value={result.id}
-                      >
-                        <span className="bp-icon">
-                          {"faviconUrl" in result && result.faviconUrl ? (
-                            <img alt="" src={result.faviconUrl} />
-                          ) : (
-                            iconFor(result)
-                          )}
-                        </span>
-                        <span className="bp-copy">
-                          <span className="bp-title">{result.title}</span>
-                          <span className="bp-subtitle">{result.subtitle}</span>
-                        </span>
-                        <span className="bp-kind">{shortcut}</span>
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              ))}
+                      return (
+                        <CommandItem
+                          data-result-id={result.id}
+                          data-manual-selected={result.id === selectedResultId}
+                          data-type={result.type}
+                          key={result.id}
+                          onMouseEnter={() => setSelectedResultId(result.id)}
+                          onSelect={() => activateResult(result)}
+                          value={result.id}
+                        >
+                          <span className="bp-icon">
+                            {"faviconUrl" in result && result.faviconUrl ? (
+                              <img alt="" src={result.faviconUrl} />
+                            ) : (
+                              iconFor(result)
+                            )}
+                          </span>
+                          <span className="bp-copy">
+                            <span className="bp-title">{result.title}</span>
+                            <span className="bp-subtitle">{result.subtitle}</span>
+                          </span>
+                          <span className="bp-kind">{shortcut}</span>
+                        </CommandItem>
+                      );
+                    })}
+                  </CommandGroup>
+                ))
+              )}
             </CommandList>
           </Command>
           <div className="bp-footer">

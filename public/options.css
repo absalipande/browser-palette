@@ -1,0 +1,99 @@
+body {
+  margin: 0;
+  background: #f7f7f5;
+  color: #17181c;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+.options-shell {
+  min-height: 100vh;
+  padding: 48px 20px;
+}
+
+.options-panel {
+  width: min(720px, 100%);
+  margin: 0 auto;
+  border: 1px solid #d9dbe1;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 22px 60px rgba(17, 18, 23, 0.12);
+  overflow: hidden;
+}
+
+.options-header {
+  padding: 28px 30px 22px;
+  border-bottom: 1px solid #e3e4e8;
+}
+
+.options-title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.options-copy {
+  margin: 8px 0 0;
+  color: #6d7280;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.options-section {
+  display: grid;
+  gap: 14px;
+  padding: 24px 30px;
+  border-bottom: 1px solid #eceef2;
+}
+
+.options-section:last-child {
+  border-bottom: 0;
+}
+
+.options-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #737886;
+}
+
+.options-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.options-button {
+  min-height: 36px;
+  cursor: pointer;
+  border: 1px solid #d6d9df;
+  border-radius: 9px;
+  background: #fff;
+  padding: 0 14px;
+  color: #25272d;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.options-button[data-active="true"] {
+  border-color: #17181c;
+  background: #17181c;
+  color: #fff;
+}
+
+.options-button[data-danger="true"] {
+  border-color: #f1c5c5;
+  color: #b42318;
+}
+
+.options-status {
+  min-height: 20px;
+  color: #6d7280;
+  font-size: 13px;
+}

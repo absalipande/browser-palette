@@ -7,6 +7,7 @@ export type PaletteResult =
       title: string;
       subtitle: string;
       faviconUrl?: string;
+      meta?: string;
     }
   | {
       type: "search";
@@ -14,6 +15,7 @@ export type PaletteResult =
       title: string;
       subtitle: string;
       query: string;
+      meta?: string;
     }
   | {
       type: "url";
@@ -22,6 +24,7 @@ export type PaletteResult =
       subtitle: string;
       url: string;
       faviconUrl?: string;
+      meta?: string;
     }
   | {
       type: "history";
@@ -33,13 +36,23 @@ export type PaletteResult =
       faviconUrl?: string;
       visitCount: number;
       lastVisitedAt: number;
+      meta?: string;
     }
   | {
       type: "command";
       id: string;
       title: string;
       subtitle: string;
-      command: "clear-history" | "theme-system" | "theme-light" | "theme-dark" | "toggle-open-behavior";
+      command:
+        | "clear-history"
+        | "theme-system"
+        | "theme-light"
+        | "theme-dark"
+        | "open-current-tab"
+        | "open-new-tab"
+        | "toggle-open-behavior"
+        | "open-settings";
+      meta?: string;
     };
 
 export type HistoryEntry = {
@@ -66,6 +79,7 @@ export type OpenBehaviorPreference = "current-tab" | "new-tab";
 export type RuntimeMessage =
   | { type: "palette:status" }
   | { type: "palette:toggle" }
+  | { type: "tab:zoom" }
   | { type: "palette:results"; query: string }
   | { type: "palette:activate"; result: PaletteResult }
   | { type: "palette:delete"; result: PaletteResult }

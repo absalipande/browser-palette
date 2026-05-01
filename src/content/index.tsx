@@ -5,12 +5,13 @@ import type { RuntimeMessage, RuntimeResponse, VisitRecord } from "../types";
 import { hostnameFromUrl, normalizeUrl, prettifyUrl } from "../url/normalize-url";
 import paletteStyles from "../ui/palette.css?inline";
 
-const CONTENT_SCRIPT_VERSION = "0.1.5";
+const CONTENT_SCRIPT_VERSION = "0.1.9";
 let root: ReturnType<typeof createRoot> | null = null;
 let host: HTMLDivElement | null = null;
 let open = false;
 
 ensurePalette();
+syncPageZoom();
 recordCurrentVisit();
 window.addEventListener("pageshow", recordCurrentVisit, { once: true });
 
@@ -76,12 +77,22 @@ function ensurePalette() {
 function togglePalette() {
   open = !open;
   ensurePalette();
+  syncPageZoom();
 
   window.dispatchEvent(
     new CustomEvent("browser-palette:open-change", {
       detail: { open }
     })
   );
+}
+
+async function syncPageZoom() {
+  const response = await chrome.runtime
+    .sendMessage<RuntimeMessage, RuntimeResponse<{ zoom: number }>>({ type: "tab:zoom" })
+    .catch(() => null);
+  const zoom = response?.ok && response.zoom > 0 ? response.zoom : 1;
+
+  host?.style.setProperty("--bp-page-scale", String(1 / zoom));
 }
 
 function recordCurrentVisit() {
@@ -122,7 +133,7 @@ function getBestFavicon() {
   );
 
   if (!icon?.href) {
-    return "";
+    return `${window.location.origin}/favicon.ico`;
   }
 
   try {

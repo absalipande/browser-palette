@@ -14,7 +14,7 @@ import {
 import { scoreHistoryEntry } from "./ranking";
 
 const SEARCH_URL = "https://www.google.com/search?q=";
-const CONTENT_SCRIPT_VERSION = "0.1.9";
+const CONTENT_SCRIPT_VERSION = "0.1.11";
 chrome.commands.onCommand.addListener(async (command) => {
   if (command !== "open-palette") {
     return;

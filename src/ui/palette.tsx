@@ -165,6 +165,9 @@ export function Palette({ onOpenChange }: { onOpenChange: (open: boolean) => voi
   }
 
   function handleCommandKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    event.stopPropagation();
+    event.nativeEvent.stopImmediatePropagation();
+
     if (event.repeat) {
       return;
     }
@@ -291,6 +294,7 @@ export function Palette({ onOpenChange }: { onOpenChange: (open: boolean) => voi
             onKeyDown={handleCommandKeyDown}
             onValueChange={setSelectedResultId}
             shouldFilter={false}
+            vimBindings={false}
             value={selectedResultId}
           >
             <div className="bp-command-topbar">

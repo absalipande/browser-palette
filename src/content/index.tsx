@@ -5,7 +5,7 @@ import type { RuntimeMessage, RuntimeResponse, VisitRecord } from "../types";
 import { hostnameFromUrl, normalizeUrl, prettifyUrl } from "../url/normalize-url";
 import paletteStyles from "../ui/palette.css?inline";
 
-const CONTENT_SCRIPT_VERSION = "0.1.11";
+const CONTENT_SCRIPT_VERSION = "0.1.12";
 let root: ReturnType<typeof createRoot> | null = null;
 let host: HTMLDivElement | null = null;
 let open = false;
